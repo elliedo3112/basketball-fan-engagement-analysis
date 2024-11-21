@@ -1,0 +1,258 @@
+---
+title: "Fan Engagement Analysis for Mount Holyoke College"
+author: "Ellie Do"
+date: "2024-11-12"
+output:
+  html_document:
+    df_print: paged
+  pdf_document:
+    fig_height: 2.8
+    fig_width: 6
+    highlight: zenburn
+subtitle: Koding with KAGR Case Competition
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#update.packages()
+```
+
+
+```{r, message=FALSE, include=FALSE}
+library(dplyr)   # Use functions like summarize
+library(readxl)  # Read excel 
+library(readr)   # Read CSV files
+library(ggplot2) # Make plots
+library(mosaic)  # Convenient interface to t.test function
+library(gmodels) # Use fit.contrast() function
+
+```
+
+
+```{r readfile}
+kagr <- read.csv("kagr.csv")
+```
+
+Mount Holyoke College is seeking to host a major collegiate women’s basketball tournament at a neutral site. You have been hired by your Athletic Department to analyze and make a case for why your school should or should not host the event.
+
+**Fan Engagement Analysis:**
+
+The goal of this data analysis is to assess whether Mount Holyoke College has a strong fan base for its sports teams, independent of school affiliation. Specifically, we aim to explore if fan engagement is driven more by general interest in the sport rather than the connection to the school itself. This is critical for understanding the potential fan base when hosting neutral events, as a diverse and engaged audience beyond the immediate school community can contribute to the success and sustainability of sports events. By analyzing various factors such as fan type, attendance trends, and demographic characteristics, we can better gauge the level of support for Mount Holyoke’s sports offerings and the potential for attracting a broad audience for future events.
+
+# 1) Data Transformation 
+
+Centering Age: We created a new variable, centered_age, by subtracting the mean age from each individual's age. Given the age range of 18 to 65, centering the age helps to simplify interpretation in our models by reducing multicollinearity and improving numerical stability. Models will now use this centered age variable to focus on relative differences from the average age.
+
+Transforming Attendance: We applied a square root transformation to the Lifetime_Games_Attended variable, resulting in a new variable, sqrt_attend. This transformation helps to satisfy the equal variance assumption by reducing the impact of high attendance values, making the data more normally distributed and suitable for model assumptions.
+
+Reclassifying Fan Type by School Affiliation: To analyze the impact of school affiliation on fan behavior, we reclassified the Fan_Type variable. Fans who are "Alumni" or "Student" were grouped under a new category, "School Affiliated," while other fan types remain in their original categories. This new variable, Affiliation, allows us to differentiate between school-affiliated fans and general fans in subsequent analyses.
+
+```{r}
+kagr <- kagr %>% 
+  mutate(centered_age = Age - mean(Age))
+kagr <- kagr %>% 
+  mutate(sqrt_attend = sqrt(Lifetime_Games_Attended))
+kagr <- kagr %>%
+  mutate(Affiliation = ifelse(Fan_Type %in% c("Alumni", "Student"), "School Affiliated", Fan_Type))
+
+```
+
+
+At the first glance, we can see that Alumni and General Fan have a The distribution of Alumni and General Fans appears similar, whereas Students display a distinctly different spread. This indicates the need for a deeper analysis of each group to understand their unique characteristics.
+
+
+# 2) Data Analysis
+
+### (a) Fan Affiliation: Comparing School-Affiliated Fans and General Fans
+  
+  We will examine fan affiliation by comparing School-Affiliated Fans (such as Alumni and Students) to General Fans, to understand potential differences in engagement and behavior.
+
+ 
+```{r}
+
+ ggplot(data = kagr, aes(x = Affiliation)) +
+  geom_bar() +
+  xlab("Fan Type")+
+  ylab("Number of Fan") +
+  theme_classic()
+  
+```
+
+ We will run three multiple linear regression models to analyze the impact of fan demographics—specifically age, gender, and income level—on various engagement metrics, including concessions spent, retail spent, travel distance, attendance, and engagement score.
+```{r}
+
+fan_model <- lm(sqrt_attend ~ Affiliation + Gender + centered_age + Income_Level, data = kagr)
+summary(fan_model)
+
+concession<-lm(Lifetime_Concessions_Spend ~ Affiliation + Gender + centered_age + Income_Level, data = kagr)
+summary(concession)
+
+retail<-lm(Lifetime_Retail_Spend ~ Affiliation + Gender + centered_age + Income_Level, data = kagr)
+summary(retail)
+
+engagement <- lm(Total_Engagement_Score ~ Affiliation + centered_age+Gender+Income_Level, data = kagr)
+summary(engagement)
+
+```
+
+```{r}
+ggplot(data = kagr, aes(x = Attendance_Trend, fill = Affiliation)) +
+  geom_bar() +
+  scale_fill_manual(values = c("steelblue", "lightblue","blue")) +
+  ylab("Number of People") +
+  theme_classic()
+
+ggplot(data = kagr, aes(x = Income_Level, fill = Affiliation)) +
+  geom_bar() +
+  scale_fill_manual(values = c("steelblue", "lightblue","blue")) +
+  ylab("Number of People") +
+  theme_classic()
+```
+
+Overall, the analysis suggests that age and income level are the most significant factors influencing fan behavior across the models.
+
+Age consistently has a significant effect, with older fans attending more games, spending more on concessions and retail, and showing higher engagement. This suggests that age is an important factor to consider when analyzing fan behavior, particularly with regard to long-term attendance and spending habits.
+
+Income level also plays a significant role in spending patterns, particularly for concessions and retail spend. Lower-income fans tend to spend significantly less on both categories, which could indicate financial constraints or different spending priorities compared to medium or higher-income fans. This pattern should be closely examined, as income level influences both engagement and the economic behavior of fans.
+
+However, there is not much difference between school-affiliated and non-affiliated fans, with the exception of age and income, which highlight specific behaviors. This calls for a deeper look into the student group (ages 18-22), as they may exhibit distinct patterns due to their age, income, and school affiliation. In particular, students in this age range may have different levels of spending power and engagement compared to other fan types, warranting further investigation.
+
+### (b) Fan Type: Alumni, Students, and General Fans
+
+```{r}
+ggplot(data = kagr, aes(x = sqrt_attend)) +
+  geom_histogram(aes(col=Fan_Type), bins = 10) +
+  facet_wrap( ~ Fan_Type, ncol = 3) +
+  ggtitle("Fan Type vs. Square Root Lifetime Attendance Distribution")+
+  xlab("Number of Square Root Games Attended") +
+  ylab("Number of Fans")+
+  theme_bw()
+  
+  
+  
+ggplot(data = kagr, aes(x = Fan_Type)) +
+  geom_bar() +
+  xlab("Fan Type")
+  ylab("Number of Fan") +
+  theme_classic()
+```
+
+We are performing three Multiple Linear Regression analyses to investigate how fan demographics (age, gender, income level) influence key aspects of fan behavior among fan types (Alumni, Students, and General Fan)
+  
+  
+```{r}
+model1 <- lm(Total_Engagement_Score ~ Fan_Type + centered_age+Gender+Income_Level, data = kagr)
+summary(model1)
+model2 <- lm(Distance_to_Arena_Miles ~ Fan_Type+centered_age+Gender+Income_Level, data = kagr)
+summary(model2)
+model3<-lm(sqrt_attend ~ Fan_Type+centered_age+Gender+Income_Level, data = kagr)
+summary(model3)
+
+ggplot(data = kagr, aes(x=Distance_to_Arena_Miles ,y=sqrt_attend, color = Fan_Type)) +
+  geom_point() +
+  theme_bw()
+
+```
+
+From the analysis, we find that:
+
+*Engagement Score: Fan type, age, and gender do not significantly influence the engagement score. However, non-binary fans show an average engagement score that is 3 to 4.69 points higher compared to other groups.*
+
+*Traveling Distance and Attendance: Students tend to have a lower mean traveling distance to the arena and attend fewer women's basketball games compared to alumni and general fans, when controlling for other factors. The difference in traveling distance between alumni and general fans, however, is not significant.*
+
+*Student Considerations: Given that students generally live on campus, their average traveling distance is limited to less than 2 miles, making it difficult to assess whether their attendance is driven by interest in the sport or their school affiliation. Additionally, students often fall into the low-income category due to their limited earning capacity. Because of these factors, we will exclude students from further analysis. We will focus on Alumni and General Fans, whose behaviors and demographics provide more meaningful insights into the relationships between fan type, engagement, and attendance.*
+
+### (c) Fan Type: Alumni vs General Fan
+```{r}
+kagr_ns <- kagr %>% filter(Fan_Type != "Student")
+
+```
+
+These models examine the impact of fan affiliation, gender, age, income level, attendance trend, and season ticket membership on the square root of game attendance,concessions spent, retail spent and engagement score, adjusting for these variables to better understand their individual effects.
+
+```{r}
+
+fan_model <- lm(sqrt_attend ~ Fan_Type + Gender + centered_age + Income_Level + Attendance_Trend+STM_Holder, data = kagr_ns)
+summary(fan_model)
+
+concession<-lm(Lifetime_Concessions_Spend ~ Fan_Type + Gender + centered_age + Income_Level + Attendance_Trend+STM_Holder, data = kagr_ns)
+summary(concession)
+
+retail<-lm(Lifetime_Retail_Spend ~ Fan_Type + Gender + centered_age + Income_Level + Attendance_Trend+STM_Holder, data = kagr_ns)
+summary(retail)
+
+engagement <- lm(Total_Engagement_Score ~ Fan_Type + centered_age+Gender+Income_Level, data = kagr_ns)
+summary(engagement)
+
+```
+We found that:
+
+**Season Ticket** Holders are consistently significant across all models, showing they have a strong impact on fan engagement and spending.
+Age is also a significant factor in fan behavior across multiple outcomes, particularly related to attendance and spending.
+ 
+**Gender (Non-binary)** shows a positive relationship with engagement in one model, highlighting the need to look closer at how different fan types engage.
+**Fan Type (General Fan)** does not seem to strongly impact attendance, retail spending, or concessions spending.
+
+```{r}
+ggplot(data = kagr_ns, aes(x = Attendance_Trend, fill = Fan_Type)) +
+  geom_bar() +
+  scale_fill_manual(values = c("steelblue", "lightblue","blue")) +
+  xlab("Attendance Trend")+
+  ylab("Number of People") +
+  theme_classic()
+
+ggplot(data = kagr_ns, aes(x = Age, y = Lifetime_Games_Attended, color = STM_Holder)) +
+  geom_point() +
+  ylab("Lifetime Attendance")+
+  theme_bw()
+```
+
+Season Ticket Membership exhibit a strong positive impact on attendance, spend, and engagement, warranting further investigation into their specific behaviors, segmentation, and potential differences between alumni and general fan.
+
+### (d) Attendance Trend among Fans with Season Ticket Membership (high attendance)
+
+```{r}
+kagr_stm<- kagr %>% filter(STM_Holder==1)
+
+#Engagement and Spending among STM_Holder (high attendance people)
+summary(lm(sqrt_attend ~ Affiliation + Gender + centered_age + Income_Level + Attendance_Trend, data = kagr_stm))
+
+summary(lm(Lifetime_Concessions_Spend ~ Affiliation + Gender + centered_age + Income_Level + Attendance_Trend, data = kagr_stm))
+
+summary(lm(Lifetime_Retail_Spend ~ Affiliation + Gender + centered_age + Income_Level + Attendance_Trend, data = kagr_stm))
+
+ggplot(data = kagr_stm, aes(x = Attendance_Trend, fill = Affiliation)) +
+  geom_bar() +
+  scale_fill_manual(values = c("steelblue", "lightblue","blue")) +
+  xlab("Attendance Trend")
+  ylab("Number of Fan") +
+  theme_classic()
+
+```
+Overall, the models suggest that there is no significant difference in attendance, concessions, or retail spend between school-affiliated (alumni) and non-affiliated (general) fans. Interestingly, general fans with STMs tend to have higher attendance, indicating that people attend the events driven by their interest in the sport itself, rather than school affiliation. The season ticket membership seems to be a key driver of engagement, with both alumni and non-alumni showing similar patterns of behavior.
+
+### (e) Analysis among Fans with Increasing and Stable Attendance Trend and Season Ticket Membership
+
+```{r}
+# Fan Engagement within the Increasing Attendance Trend
+kagr_increase <- kagr_stm %>% filter(Attendance_Trend %in% c("Increasing","Stable"))
+
+increasing_fan_lm<-lm(sqrt_attend~Fan_Type + centered_age + STM_Holder, data=kagr_increase)
+summary(increasing_fan_lm)
+```
+General fans, particularly those with an increasing trend in attendance, tend to show higher attendance, indicating that interest in the sport, rather than affiliation or age, is the key driver of engagement. Although the analysis does not find a significant effect for STM holders in this model, it is possible that other factors, such as fan loyalty or sport-specific interest, might explain the higher engagement from general fans.
+
+
+**Conclusion:**
+
+Based on the data analysis of fan type and school affiliation, we can conclude that there is strong evidence suggesting that neither fan type nor school affiliation significantly affect attendance or participation in Mount Holyoke College's sports events. The analysis showed that factors such as being an alumnus or current student do not appear to drive fan engagement, with general fans, including those unaffiliated with the school, showing similar levels of attendance and participation. **This supports the idea that the potential fan base for Mount Holyoke’s sports is driven more by interest in the sport itself rather than a connection to the school. As a result, when acting as a neutral host for sports events, Mount Holyoke College has a strong, diverse fan base that is capable of supporting a variety of sporting events, regardless of school affiliation.** This indicates a positive outlook for the college’s ability to attract a broad audience and ensure the success of future neutral-hosted sports events.
+
+
+
+
+
+
+
+
+```
+
